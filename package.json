@@ -3,6 +3,13 @@
   "version": "1.0.0",
   "description": "Automatic installation of a widget in amoCRM",
   "main": "dist/widget-installer.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "rollup --config rollup.config.js"
   },
@@ -14,7 +21,7 @@
     "amocrm",
     "widget"
   ],
-  "author": "Maksim Kutishchev",
+  "author": "Maksim Kutishchev <max@amopro.ru>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/max-kut/amocrm-widget-installer/issues"
