@@ -1,0 +1,36 @@
+{
+  "name": "@amopro/widget-installer",
+  "version": "1.0.0",
+  "description": "Automatic installation of a widget in amoCRM",
+  "main": "dist/widget-installer.js",
+  "scripts": {
+    "build": "rollup --config rollup.config.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/max-kut/amocrm-widget-installer.git"
+  },
+  "keywords": [
+    "amocrm",
+    "widget"
+  ],
+  "author": "Maksim Kutishchev",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/max-kut/amocrm-widget-installer/issues"
+  },
+  "homepage": "https://github.com/max-kut/amocrm-widget-installer#readme",
+  "dependencies": {
+    "archiver": "^2.1.1",
+    "content-type": "^1.0.4",
+    "jsdom": "^16.4.0",
+    "lodash": "^4.17.19",
+    "request-promise": "^4.2.6"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.11.6",
+    "@babel/plugin-proposal-class-properties": "^7.13.0",
+    "@babel/preset-env": "^7.11.5",
+    "@rollup/plugin-commonjs": "^11.1.0"
+  }
+}
