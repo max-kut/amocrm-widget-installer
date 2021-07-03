@@ -1,8 +1,9 @@
 {
   "name": "@amopro/widget-installer",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Automatic installation of a widget in amoCRM",
-  "main": "dist/widget-installer.js",
+  "main": "dist/widget-installer.cjs",
+  "module": "dist/widget-installer.esm.js",
   "type": "module",
   "files": [
     "src",
