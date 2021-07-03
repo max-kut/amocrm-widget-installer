@@ -1,10 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const archiver = require('archiver');
-const contentType = require('content-type');
-const _get = require('lodash/get');
-const request = require('request-promise');
-const {JSDOM} = require("jsdom");
+import fs from 'fs';
+import contentType from 'content-type';
+import get from 'lodash/get';
+import request from 'request-promise';
+import {JSDOM} from 'jsdom';
+import ZipReader from './ZipReader';
 
 
 export default class WidgetInstaller {
@@ -12,22 +11,27 @@ export default class WidgetInstaller {
      * @param {String} subDomain
      * @param {String} login
      * @param {String} password
-     * @param {String} widgetDirectory
+     * @param {String} widgetZipPath
      * @param {String} redirectUri
      * @param {String} defaultLocale
      */
-    constructor(subDomain, login, password, widgetDirectory, redirectUri = 'https://amocrm.ru/', defaultLocale = 'ru') {
+    constructor(
+      subDomain,
+      login,
+      password,
+      widgetZipPath = 'widget.zip',
+      redirectUri = 'https://amocrm.ru/',
+      defaultLocale = 'ru'
+    ) {
         this.login = login;
         this.password = password;
-        this.domain = subDomain;
+        this.subDomain = subDomain;
         this.redirectUri = redirectUri;
-        this.widgetDirectory = widgetDirectory;
         this.defaultLocale = defaultLocale;
 
-        this.accessToken = null;
-        this.refreshToken = null;
+        this.widgetZipPath = widgetZipPath;
+        this.zipReader = new ZipReader(widgetZipPath);
 
-        this.widget_code = null;
         this.widget_uuid = null;
 
         this._request = request.defaults({
@@ -37,7 +41,7 @@ export default class WidgetInstaller {
                 'Referer': this._url('/settings/widgets/')
             },
             jar: true,
-            transform(body, response) {
+            transform: (body, response) => {
                 const ct = contentType.parse(response.headers['content-type']);
                 if (ct.type === 'application/json' || ct.type === 'text/json') {
                     try {
@@ -54,7 +58,8 @@ export default class WidgetInstaller {
 
     async upload() {
         await this._createAuthenticatedSession();
-        const widgetName = this._getManifestLocalizedValue('widget.name');
+
+        const widgetName = await this._getManifestLocalizedValue('widget.name');
 
         await this._findWidgetData(widgetName);
 
@@ -62,17 +67,17 @@ export default class WidgetInstaller {
             const {uuid} = await this._request.post(this._url(`/v3/clients/`), {
                 json: this._getWidgetData()
             });
-            await this.uploadWidget(uuid);
+            await this._uploadWidget(uuid);
         } else {
             const {uuid} = await this._request.patch(this._url(`/v3/clients/${this.widget_uuid}`), {
                 json: this._getWidgetData()
             });
-            await this.uploadWidget(uuid);
+            await this._uploadWidget(uuid);
         }
     }
 
     _url(path) {
-        return `https://${this.domain}.amocrm.ru/` + path.replace(/^\/*(.*)/, '$1')
+        return `https://${this.subDomain}.amocrm.ru/` + path.replace(/^\/*(.*)/, '$1')
     }
 
     /**
@@ -90,7 +95,7 @@ export default class WidgetInstaller {
             csrfToken = dom.window.document.querySelector('input[name="csrf_token"]').value;
         }
 
-        const res = await this._request.post(this._url(`/oauth2/authorize`), {
+        await this._request.post(this._url(`/oauth2/authorize`), {
             headers: {
                 Referer: this._url(`/`)
             },
@@ -101,9 +106,6 @@ export default class WidgetInstaller {
                 temporary_auth: 'N'
             }
         });
-
-        this.accessToken = res.access_token;
-        this.refreshToken = res.refresh_token;
     }
 
     async _findWidgetData(name) {
@@ -117,7 +119,6 @@ export default class WidgetInstaller {
             const integrations = widgets.own_integrations[type];
             for (const code in integrations) if (integrations.hasOwnProperty(code)) {
                 if (integrations[code].type === 'widget' && name === integrations[code].name) {
-                    this.widget_code = integrations[code].code;
                     this.widget_uuid = integrations[code].client.uuid;
                     return;
                 }
@@ -149,8 +150,7 @@ export default class WidgetInstaller {
 
     _getManifest() {
         if (typeof this._manifest === 'undefined') {
-            const manifestPath = path.resolve(this.widgetDirectory, 'manifest.json');
-            this._manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            this._manifest = JSON.parse(this.zipReader.getFileAsString('manifest.json'));
         }
         return this._manifest;
     }
@@ -167,24 +167,25 @@ export default class WidgetInstaller {
         if (typeof this._manifest_i18n === 'undefined' || typeof this._manifest_i18n[locale] === 'undefined') {
             this._manifest_i18n = this._manifest_i18n || {};
             try {
-                this._manifest_i18n[locale] = JSON.parse(
-                  fs.readFileSync(path.resolve(this.widgetDirectory, `i18n/${locale}.json`), 'utf8')
-                )
+                this._manifest_i18n[locale] = JSON.parse(this.zipReader.getFileAsString(`i18n/${locale}.json`));
             } catch (e) {
                 return null;
             }
         }
 
-        return _get(this._manifest_i18n[locale], key, _get(this._getManifest(), key));
+        return get(this._manifest_i18n[locale], key, get(this._getManifest(), key));
     }
 
-    async uploadWidget(uuid) {
-        const archivePath = await WidgetInstaller.zipArchive(this.widgetDirectory);
-
-        const result = await this._request.post(this._url(`/ajax/widgets/${uuid}/widget/upload/?fileapi${Date.now()}`), {
+    /**
+     * @param {String} uuid
+     * @return {Promise<void>}
+     * @private
+     */
+    async _uploadWidget(uuid) {
+        await this._request.post(this._url(`/ajax/widgets/${uuid}/widget/upload/?fileapi${Date.now()}`), {
             formData: {
                 'widget': {
-                    value: fs.createReadStream(archivePath),
+                    value: fs.createReadStream(this.widgetZipPath),
                     options: {
                         filename: 'widget.zip',
                         contentType: 'application/x-zip-compressed'
@@ -192,31 +193,6 @@ export default class WidgetInstaller {
                 },
                 '_widget': 'widget.zip',
             }
-        });
-
-        return result;
-    }
-
-    static zipArchive(widgetFolder) {
-        return new Promise((resolve, reject) => {
-            const widgetPath = path.resolve('widget.zip');
-            const widgetFileStream = fs.createWriteStream(widgetPath);
-
-            const archive = archiver('zip', {
-                zlib: {level: 1}
-            });
-
-            widgetFileStream.on('close', () => {
-                resolve(widgetPath);
-            });
-
-            archive.on('error', (err) => {
-                reject(err);
-            });
-
-            archive.pipe(widgetFileStream);
-            archive.directory(path.resolve(widgetFolder), false);
-            archive.finalize();
         });
     }
 }
