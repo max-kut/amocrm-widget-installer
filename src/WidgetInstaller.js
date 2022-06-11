@@ -2,11 +2,22 @@ import fs from 'fs';
 import contentType from 'content-type';
 import get from 'lodash/get';
 import request from 'request-promise';
-import {JSDOM} from 'jsdom';
+import { JSDOM } from 'jsdom';
 import ZipReader from './ZipReader';
 
 
 export default class WidgetInstaller {
+    subDomain;
+    login;
+    password;
+    widgetZipPath;
+    redirectUri;
+    defaultLocale;
+    amoMarket;
+
+    widget_uuid = null;
+    _request;
+
     /**
      * @param {String} subDomain
      * @param {String} login
@@ -14,25 +25,27 @@ export default class WidgetInstaller {
      * @param {String} widgetZipPath
      * @param {String} redirectUri
      * @param {String} defaultLocale
+     * @param {Boolean} amoMarket
      */
     constructor(
-      subDomain,
-      login,
-      password,
-      widgetZipPath = 'widget.zip',
-      redirectUri = 'https://amocrm.ru/',
-      defaultLocale = 'ru'
+        subDomain,
+        login,
+        password,
+        widgetZipPath = 'widget.zip',
+        redirectUri = 'https://amocrm.ru/',
+        defaultLocale = 'ru',
+        amoMarket = true
     ) {
         this.login = login;
         this.password = password;
         this.subDomain = subDomain;
         this.redirectUri = redirectUri;
         this.defaultLocale = defaultLocale;
+        this.amoMarket = amoMarket;
 
         this.widgetZipPath = widgetZipPath;
         this.zipReader = new ZipReader(widgetZipPath);
 
-        this.widget_uuid = null;
 
         this._request = request.defaults({
             headers: {
@@ -61,21 +74,25 @@ export default class WidgetInstaller {
 
         const widgetName = await this._getManifestLocalizedValue('widget.name');
 
-        await this._findWidgetData(widgetName);
+        const wigetUUID = await this._findWidgetUUID(widgetName);
 
-        if (this.widget_uuid === null) {
-            const {uuid} = await this._request.post(this._url(`/v3/clients/`), {
-                json: this._getWidgetData()
+        if (wigetUUID === null) {
+            const { uuid } = await this._request.post(this._url(`/v3/clients/`), {
+                json: this._getWidgetData(wigetUUID)
             });
             await this._uploadWidget(uuid);
         } else {
-            const {uuid} = await this._request.patch(this._url(`/v3/clients/${this.widget_uuid}`), {
-                json: this._getWidgetData()
+            const { uuid } = await this._request.patch(this._url(`/v3/clients/${wigetUUID}`), {
+                json: this._getWidgetData(wigetUUID)
             });
             await this._uploadWidget(uuid);
         }
     }
 
+    /**
+     * @param {String} path 
+     * @returns {String}
+     */
     _url(path) {
         return `https://${this.subDomain}.amocrm.ru/` + path.replace(/^\/*(.*)/, '$1')
     }
@@ -90,7 +107,7 @@ export default class WidgetInstaller {
             // this request has 401 response
             await this._request.get(this._url(`/`));
         } catch (e) {
-            const {response} = e;
+            const { response } = e;
             const dom = new JSDOM(response);
             csrfToken = dom.window.document.querySelector('input[name="csrf_token"]').value;
         }
@@ -108,27 +125,55 @@ export default class WidgetInstaller {
         });
     }
 
-    async _findWidgetData(name) {
+    /**
+     * 
+     * @param {String} name 
+     * @returns {String|null}
+     */
+    async _findWidgetUUID(name) {
         if (!name) {
             throw new Error('name is required')
         }
 
-        const {widgets} = await this._request.get(this._url(`/ajax/settings/widgets/category/own_integrations/1/`));
+        const getUUIDFromMarket = async () => {
+            const pageSize = 20;
+            let page = 1;
+            let countItems;
+            do {
+                const {integrations} = await this._request.get(this._url(`/ajax/settings/widgets/category/own_integrations/${page}/`));
 
-        for (const type of Object.keys(widgets.own_integrations)) {
-            const integrations = widgets.own_integrations[type];
-            for (const code in integrations) if (integrations.hasOwnProperty(code)) {
-                if (integrations[code].type === 'widget' && name === integrations[code].name) {
-                    this.widget_uuid = integrations[code].client.uuid;
-                    return;
+                countItems = Object.keys(integrations).length;
+                page++;
+
+                for (const code in integrations) {
+                    if (integrations[code].type === 'widget' && name === integrations[code].name) {
+                        return integrations[code].client.uuid;
+                    }
+                }
+            } while (countItems >= pageSize);
+
+            return null;
+        };
+        const getUUIDFromLegacy = async () => {
+            const { widgets } = await this._request.get(this._url(`/ajax/settings/widgets/category/own_integrations/1/`));
+
+            for (const type in widgets.own_integrations) {
+                const integrations = widgets.own_integrations[type];
+                for (const code in integrations) {
+                    if (integrations[code].type === 'widget' && name === integrations[code].name) {
+                        return integrations[code].client.uuid;
+                    }
                 }
             }
-        }
 
-        return null;
+            return null;
+        };
+
+
+        return this.amoMarket ? await getUUIDFromMarket() : await getUUIDFromLegacy();
     }
 
-    _getWidgetData() {
+    _getWidgetData(wigetUUID) {
         return {
             name: {
                 en: this._getManifestLocalizedValue('widget.name', 'en') || "",
@@ -144,7 +189,7 @@ export default class WidgetInstaller {
             },
             redirect_uri: this.redirectUri,
             scopes: ['crm', 'notifications'],
-            uuid: this.widget_uuid
+            uuid: wigetUUID
         };
     }
 

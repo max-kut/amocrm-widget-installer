@@ -8,8 +8,8 @@ import archiver from 'archiver';
  * @param {String} zipPath
  * @return {Promise<String>} path to archive
  */
-export async function makeZipArchive(widgetFolder, zipPath = 'widget.zip') {
-    return await new Promise((resolve, reject) => {
+export function makeZipArchive(widgetFolder, zipPath = 'widget.zip') {
+    return new Promise((resolve, reject) => {
         const widgetPath = path.resolve(zipPath);
         const widgetFileStream = fs.createWriteStream(widgetPath);
 
