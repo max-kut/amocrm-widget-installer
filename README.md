@@ -3,7 +3,7 @@
 Сервис, который упаковывает директорию в zip-архив и загружает в аккаунт amoCRM. 
 Если в amoCRM виджет не существует, он будет создан, иначе будет обновлен.
 
-Обратите внимание, что с 2022-06-08 amoCRM добавила amoМаркет. Если аккаунт обновился и имеет доступ к маркету (вместо раздела Настройки -> Интеграции), то в конструкторе `WidgetInstaller` можете указать `true` пятым аргументом. Иначе укажате `false`.
+Обратите внимание, что с 2022-06-08 amoCRM добавила amoМаркет. Если аккаунт обновился и имеет доступ к маркету (вместо раздела Настройки -> Интеграции), то в объекте параметров конструктора `WidgetInstaller` можете указать `amoMarket: true`. Иначе укажате `amoMarket: false`.
 
 ## Установка
 ```bash
@@ -35,14 +35,16 @@ try {
     const widgetZipPath = await makeZipArchive(WIDGET_DIR);
     
     console.log('Widget uploading...');
-    const wi = new WidgetInstaller(
-      process.env.AMO_SUB_DOMAIN, 
-      process.env.AMO_LOGIN,
-      process.env.AMO_PASSWORD,
-      widgetZipPath, 
-      'ru',     // локаль виджета по умолчанию
-      true      // true - если аккаунт имеет доступ к amoМаркет (с 2022-06-08)
-    );
+    const installerParams = {
+        subDomain: process.env.AMO_SUBDOMAIN,
+        login: process.env.AMO_LOGIN,
+        password: process.env.AMO_PASSWORD,
+        widgetZipPath: widgetZipPath,
+        redirectUri: process.env.APP_URL + '/amocrm/auth',
+        revokeAccessHookUri: process.env.APP_URL + '/amocrm/destroy',
+        amoMarket: true, // true - если аккаунт имеет доступ к amoМаркет (с 2022-06-08)
+    };
+    const wi = new WidgetInstaller(installerParams);
     
     await wi.upload();
     console.log('Widget uploaded!');

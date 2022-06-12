@@ -14,6 +14,8 @@ export default class WidgetInstaller {
     redirectUri;
     defaultLocale;
     amoMarket;
+    scopes;
+    revokeAccessHookUri;
 
     widget_uuid = null;
     _request;
@@ -24,24 +26,31 @@ export default class WidgetInstaller {
      * @param {String} password
      * @param {String} widgetZipPath
      * @param {String} redirectUri
-     * @param {String} defaultLocale
+     * @param {String} revokeAccessHookUri
      * @param {Boolean} amoMarket
+     * @param {String} defaultLocale
+     * @param {Array} scopes
      */
-    constructor(
+    constructor({
         subDomain,
         login,
         password,
         widgetZipPath = 'widget.zip',
         redirectUri = 'https://amocrm.ru/',
+        revokeAccessHookUri = '',
+        amoMarket = true,
         defaultLocale = 'ru',
-        amoMarket = true
-    ) {
+        scopes = ['crm', 'notifications'],
+    }) {
         this.login = login;
         this.password = password;
         this.subDomain = subDomain;
         this.redirectUri = redirectUri;
         this.defaultLocale = defaultLocale;
         this.amoMarket = amoMarket;
+        this.scopes = scopes;
+        this.revokeAccessHookUri = revokeAccessHookUri;
+
 
         this.widgetZipPath = widgetZipPath;
         this.zipReader = new ZipReader(widgetZipPath);
@@ -188,7 +197,8 @@ export default class WidgetInstaller {
                 ru: this._getManifestLocalizedValue('widget.description', 'ru') || ""
             },
             redirect_uri: this.redirectUri,
-            scopes: ['crm', 'notifications'],
+            revoke_access_hook_uri: this.revokeAccessHookUri,
+            scopes: this.scopes,
             uuid: wigetUUID
         };
     }
